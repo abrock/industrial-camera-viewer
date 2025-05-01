@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+
+git-stuff/clang-version
+git ls-files -z | grep -ziE '\.(c|cc|cpp|h|hh|hpp)$' | xargs -0 -n1 -P$(nproc) clang-format --style=file:.clang-format --dry-run -Werror -i

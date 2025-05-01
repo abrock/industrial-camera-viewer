@@ -1,0 +1,9 @@
+#!/bin/bash
+
+output=$(git ls-files -z | xargs -0 grep -El -e '^<<<<<<< ' -e '^>>>>>>> ' -e '^=======$')
+
+if [[ -n "${output}" ]]; then
+    echo "Found git conflict markers in the following files:"
+    sed -re 's/^/  - /' <<<"${output}"
+    exit 1
+fi

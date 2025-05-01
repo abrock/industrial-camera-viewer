@@ -1,0 +1,28 @@
+#!/bin/bash
+
+IN=$(clang-format --version)
+arrIN=(${IN// / })
+
+if [ "${arrIN[0]}" != "clang-format" ]; then
+  echo "The output of clang-format --version is expected to start with 'clang-format version', got this instead"
+  echo $IN
+  exit 1
+fi
+
+if [ "${arrIN[1]}" != "version" ]; then
+  echo "The output of clang-format --version is expected to start with 'clang-format version', got this instead"
+  echo $IN
+  exit 1
+fi
+
+VERSION=${arrIN[2]}
+arrVERSION=(${VERSION//./ })
+
+if [ "${arrVERSION[0]}" != "17" ]; then
+  echo "Expected clang-format version 17, got ${arrVERSION[0]} instead"
+  echo $IN
+  exit 1
+fi
+
+exit 0
+

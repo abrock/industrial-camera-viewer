@@ -1,0 +1,17 @@
+build-essential
+cmake
+libboost-filesystem-dev
+libboost-iostreams-dev
+libboost-system-dev
+libfmt-dev
+libglib2.0-dev
+libgoogle-glog-dev
+libgtest-dev
+libjsoncpp-dev
+libtclap-dev
+meson
+ninja-build
+qml-module-qt-labs-settings
+qtbase5-dev
+qtdeclarative5-dev
+qtquickcontrols2-5-dev
