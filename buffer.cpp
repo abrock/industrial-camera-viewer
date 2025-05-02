@@ -261,6 +261,7 @@ Buffer::Buffer(ArvBuffer *buf)
   double max = 0;
   cv::minMaxIdx(img, &min, &max);
 
+  /*
   Misc::println("Acquired {}×{} buffer #{}, bpp {}, size {} (=> {}bpp, value range {}-{})",
                 width,
                 height,
@@ -270,4 +271,5 @@ Buffer::Buffer(ArvBuffer *buf)
                 double(8 * size) / (width * height),
                 min,
                 max);
+                */
 }
