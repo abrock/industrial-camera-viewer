@@ -254,7 +254,7 @@ void CameraManager::increaseExposureTime()
   EXEC_AND_CHECK(double const exp = arv_camera_get_exposure_time(camera, &error));
   println("Current exp: {}", exp);
   double const new_exp = exp * 1.2;
-  EXEC_AND_CHECK(arv_camera_set_exposure_time(camera, new_exp, &error));
+  setExposure(new_exp);
   println("Increased exposure from {} to {}", exp, new_exp);
 }
 
@@ -265,7 +265,7 @@ void CameraManager::decreaseExposureTime()
   EXEC_AND_CHECK(double const exp = arv_camera_get_exposure_time(camera, &error));
   println("Current exp: {}", exp);
   double const new_exp = exp / 1.2;
-  EXEC_AND_CHECK(arv_camera_set_exposure_time(camera, new_exp, &error));
+  setExposure(new_exp);
   println("Decreased exposure from {} to {}", exp, new_exp);
 }
 
@@ -311,6 +311,7 @@ void CameraManager::setExposure(double const exposure_us)
   arv_camera_set_exposure_time(camera, exposure_us, &error);
   CHECK_EQ(nullptr, error) << error->message;
   println("Set exposure time to {}", exposure_us);
+  emit requestedExposure(exposure_us);
 }
 
 void CameraManager::stop()

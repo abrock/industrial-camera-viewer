@@ -47,6 +47,12 @@ Window {
                                 cameraManager.setExposure(value)
                             }
                             Component.onCompleted: cameraManager.setExposure(value)
+                            Connections {
+                                target: cameraManager
+                                function onRequestedExposure(val) {
+                                    exposure.value = val;
+                                }
+                            }
                         }
                     }
                 }

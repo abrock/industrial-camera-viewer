@@ -90,6 +90,8 @@ class CameraManager : public QObject {
 
   Q_INVOKABLE void setExposure(const double exposure_us);
  signals:
+
+  void requestedExposure(int val);
 };
 
 #endif  // CAMERAMANAGER_H
