@@ -250,23 +250,21 @@ void CameraManager::runWaitKey()
 void CameraManager::increaseExposureTime()
 {
   println("Increasing exposure time...");
-  GError *error = nullptr;
-  EXEC_AND_CHECK(double const exp = arv_camera_get_exposure_time(camera, &error));
-  println("Current exp: {}", exp);
-  double const new_exp = exp * 1.2;
+  println("Current exp: {}", requested_exposure);
+  double const old_exp = requested_exposure;
+  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, 1.0/4.0));
   setExposure(new_exp);
-  println("Increased exposure from {} to {}", exp, new_exp);
+  println("Increased exposure from {} to {}", old_exp, requested_exposure);
 }
 
 void CameraManager::decreaseExposureTime()
 {
   println("Decreasing exposure time...");
-  GError *error = nullptr;
-  EXEC_AND_CHECK(double const exp = arv_camera_get_exposure_time(camera, &error));
-  println("Current exp: {}", exp);
-  double const new_exp = exp / 1.2;
+  println("Current exp: {}", requested_exposure);
+  double const old_exp = requested_exposure;
+  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, -1.0/4.0));
   setExposure(new_exp);
-  println("Decreased exposure from {} to {}", exp, new_exp);
+  println("Decreased exposure from {} to {}", old_exp, requested_exposure);
 }
 
 void CameraManager::increaseGain()
@@ -299,6 +297,7 @@ void CameraManager::makeWindow()
 void CameraManager::setExposure(double const exposure_us)
 {
   requested_exposure = exposure_us;
+  emit requestedExposure(exposure_us);
   if (!camera_running) {
     println("camera not running");
     return;
@@ -311,7 +310,6 @@ void CameraManager::setExposure(double const exposure_us)
   arv_camera_set_exposure_time(camera, exposure_us, &error);
   CHECK_EQ(nullptr, error) << error->message;
   println("Set exposure time to {}", exposure_us);
-  emit requestedExposure(exposure_us);
 }
 
 void CameraManager::stop()
