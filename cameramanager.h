@@ -18,6 +18,8 @@
 class CameraManager : public QObject {
   Q_OBJECT
 
+  std::mutex arv_mutex;
+
   ArvCamera *camera;
   GError *error = nullptr;
 
@@ -89,9 +91,13 @@ class CameraManager : public QObject {
   void makeWindow();
 
   Q_INVOKABLE void setExposure(const double exposure_us);
- signals:
+
+  Q_INVOKABLE void setGain(const double gain);
+signals:
 
   void requestedExposure(int val);
+
+  void requestedGain(int val);
 };
 
 #endif  // CAMERAMANAGER_H

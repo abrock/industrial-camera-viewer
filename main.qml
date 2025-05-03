@@ -25,10 +25,7 @@ Window {
                     category: "camera_viewer"
                     id: set
                     property int exposure: 10000
-                    property int ref_a: 0
-                    property int ref_b: 100
-                    property int test_val : 50
-                    property int average_count: 3
+                    property int gain: 0
                 }
                 ColumnLayout {
                     anchors.topMargin: 9
@@ -51,6 +48,28 @@ Window {
                                 target: cameraManager
                                 function onRequestedExposure(val) {
                                     exposure.value = val;
+                                }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Text {
+                            text: qsTr("Gain [dB]")
+                        }
+                        SpinBox {
+                            value: set.gain
+                            stepSize: 1
+                            maximumValue: 50
+                            id: gain
+                            onValueChanged: {
+                                set.gain = value
+                                cameraManager.setGain(value)
+                            }
+                            Component.onCompleted: cameraManager.setGain(value)
+                            Connections {
+                                target: cameraManager
+                                function onRequestedGain(val) {
+                                    gain.value = val;
                                 }
                             }
                         }

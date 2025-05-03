@@ -179,8 +179,11 @@ void CameraManager::runCamera()
 
   camera_running = true;
   setExposure(requested_exposure);
+  setGain(requested_gain);
 
   for (size_t ii = 0; !stopped; ++ii) {
+    usleep(10'000);
+    std::lock_guard guard(arv_mutex);
     ArvBuffer *buffer;
 
     buffer = arv_stream_pop_buffer(stream);
@@ -270,23 +273,21 @@ void CameraManager::decreaseExposureTime()
 void CameraManager::increaseGain()
 {
   println("Increasing gain...");
-  GError *error = nullptr;
-  EXEC_AND_CHECK(double const gain = arv_camera_get_gain(camera, &error));
-  println("Current gain: {}", gain);
-  double const new_gain = gain + 1;
-  EXEC_AND_CHECK(arv_camera_set_gain(camera, new_gain, &error));
-  println("Increased exposure from {} to {}", gain, new_gain);
+  println("Current gain: {}", requested_gain);
+  double const old_gain = requested_gain;
+  double const new_gain = std::clamp(requested_gain + 1, min_gain, max_gain);
+  setGain(new_gain);
+  println("Increased exposure from {} to {}", old_gain, new_gain);
 }
 
 void CameraManager::decreaseGain()
 {
   println("Decreasing gain...");
-  GError *error = nullptr;
-  EXEC_AND_CHECK(double const gain = arv_camera_get_gain(camera, &error));
-  println("Current gain: {}", gain);
-  double const new_gain = std::max(0.0, gain - 1);
-  EXEC_AND_CHECK(arv_camera_set_gain(camera, new_gain, &error));
-  println("Decreased exposure from {} to {}", gain, new_gain);
+  println("Current gain: {}", requested_gain);
+  double const old_gain = requested_gain;
+  double const new_gain = std::clamp(requested_gain - 1, min_gain, max_gain);
+  setGain(new_gain);
+  println("Decreased exposure from {} to {}", old_gain, new_gain);
 }
 
 void CameraManager::makeWindow()
@@ -307,9 +308,29 @@ void CameraManager::setExposure(double const exposure_us)
     return;
   }
   GError *error = nullptr;
+  std::lock_guard guard(arv_mutex);
   arv_camera_set_exposure_time(camera, exposure_us, &error);
   CHECK_EQ(nullptr, error) << error->message;
   println("Set exposure time to {}", exposure_us);
+}
+
+void CameraManager::setGain(const double gain)
+{
+  requested_gain = std::clamp(gain, min_gain, max_gain);
+  emit requestedGain(requested_gain);
+  if (!camera_running) {
+    println("camera not running");
+    return;
+  }
+  if (!ARV_IS_CAMERA(camera)) {
+    println("camera not valid");
+    return;
+  }
+  GError *error = nullptr;
+  std::lock_guard guard(arv_mutex);
+  arv_camera_set_gain(camera, requested_gain, &error);
+  CHECK_EQ(nullptr, error) << error->message;
+  println("Set gain time to {}", requested_gain);
 }
 
 void CameraManager::stop()
