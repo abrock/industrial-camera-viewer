@@ -234,11 +234,20 @@ void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 void CameraManager::drawCrosshairs(cv::Mat3b &img)
 {
   cv::Vec3d const red(0, 0, 255);
+  int const dash_length = 2;
+  int const row_center = img.rows / 2;
+  int const col_center = img.cols / 2;
   for (int row = 0; row < img.rows; ++row) {
-    img(row, img.cols / 2) = red;
+    int const center_dist = std::abs(row - row_center);
+    if (1 == (((center_dist) / dash_length) % 2)) {
+      img(row, col_center) = red;
+    }
   }
   for (int col = 0; col < img.cols; ++col) {
-    img(img.rows / 2, col) = red;
+    int const center_dist = std::abs(col - col_center);
+    if (1 == (((center_dist) / dash_length) % 2)) {
+      img(row_center, col) = red;
+    }
   }
 }
 
