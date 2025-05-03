@@ -104,7 +104,8 @@ void maskExposure(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
 cv::Mat3b Buffer::exposureColored() const
 {
   cv::Mat1b over_exposed = clippingMask(img);
-  cv::dilate(over_exposed, over_exposed, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+  cv::dilate(
+      over_exposed, over_exposed, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
   cv::Mat1b tmp = Misc::apply_gamma(img, 1.0 / 2.0);
   cv::Mat3b result;
   if (isBayer()) {

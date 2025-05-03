@@ -255,7 +255,7 @@ void CameraManager::increaseExposureTime()
   println("Increasing exposure time...");
   println("Current exp: {}", requested_exposure);
   double const old_exp = requested_exposure;
-  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, 1.0/4.0));
+  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, 1.0 / 4.0));
   setExposure(new_exp);
   println("Increased exposure from {} to {}", old_exp, requested_exposure);
 }
@@ -265,7 +265,7 @@ void CameraManager::decreaseExposureTime()
   println("Decreasing exposure time...");
   println("Current exp: {}", requested_exposure);
   double const old_exp = requested_exposure;
-  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, -1.0/4.0));
+  double const new_exp = std::max(1.0, requested_exposure * std::pow(2.0, -1.0 / 4.0));
   setExposure(new_exp);
   println("Decreased exposure from {} to {}", old_exp, requested_exposure);
 }
