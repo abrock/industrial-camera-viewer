@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(camera-viewer VERSION 0.1 LANGUAGES CXX)
+project(industrial-camera-viewer VERSION 0.1 LANGUAGES CXX)
 
 include_directories("/usr/local/include/aravis-0.8/")
 
@@ -91,13 +91,13 @@ set(PROJECT_SOURCES
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(camera-viewer
+    qt_add_executable(industrial-camera-viewer
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
         ${LIB_SOURCES}
     )
 else()
-    add_executable(camera-viewer
+    add_executable(industrial-camera-viewer
         ${PROJECT_SOURCES}
         ${LIB_SOURCES}
     )
@@ -112,17 +112,17 @@ target_link_libraries(tests
 )
 
 
-target_link_libraries(camera-viewer
+target_link_libraries(industrial-camera-viewer
   ${COMMON_LIBS}
 )
 
-add_executable(camera-viewer-dbus-sender camera-viewer-dbus-sender.cpp)
+add_executable(industrial-camera-viewer-dbus-sender camera-viewer-dbus-sender.cpp)
 
-target_link_libraries(camera-viewer-dbus-sender
+target_link_libraries(industrial-camera-viewer-dbus-sender
     ${COMMON_LIBS}
 )
 
-set_target_properties(camera-viewer PROPERTIES
+set_target_properties(industrial-camera-viewer PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
@@ -130,13 +130,13 @@ set_target_properties(camera-viewer PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
-install(TARGETS camera-viewer
+install(TARGETS industrial-camera-viewer
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if(QT_VERSION_MAJOR EQUAL 6)
-    qt_import_qml_plugins(camera-viewer)
-    qt_finalize_executable(camera-viewer)
+    qt_import_qml_plugins(industrial-camera-viewer)
+    qt_finalize_executable(industrial-camera-viewer)
 
     qt_import_qml_plugins(tests)
     qt_finalize_executable(tests)

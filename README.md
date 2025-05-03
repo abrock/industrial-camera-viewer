@@ -1,4 +1,4 @@
-# camera-viewer
+# industrial-camera-viewer
 A program for reading out a GigE-vision/USB-vision industrial camera, displaying images and storing them if desired
 
 Debendencies: see file "packages"
