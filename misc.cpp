@@ -1,5 +1,8 @@
 #include "misc.h"
 
+#include <opencv2/imgproc.hpp>
+#include <opencv2/photo.hpp>
+
 namespace Misc {
 
 std::vector<std::string> splitString(const std::string &in, const char s)
@@ -184,6 +187,30 @@ cv::Mat1b apply_gamma_8(const cv::Mat1b &input, const double gamma)
     }
   }
   return result;
+}
+
+cv::Mat3b denoiseValue(const cv::Mat3b &img, int const size)
+{
+  cv::Mat hsv;
+  cv::cvtColor(img, hsv, cv::COLOR_BGR2HSV_FULL);
+  std::vector<cv::Mat> splitted;
+  cv::split(hsv, splitted);
+  cv::medianBlur(splitted[0], splitted[0], ceil_odd(size));
+  cv::medianBlur(splitted[1], splitted[1], ceil_odd(size));
+  cv::merge(splitted, hsv);
+  cv::cvtColor(hsv, hsv, cv::COLOR_HSV2BGR_FULL);
+  return hsv;
+}
+
+int ceil_odd(const int val)
+{
+  if (val < 3) {
+    return 3;
+  }
+  if (val % 2 == 0) {
+    return val + 1;
+  }
+  return val;
 }
 
 }  // namespace Misc

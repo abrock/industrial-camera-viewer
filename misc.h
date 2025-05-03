@@ -54,6 +54,10 @@ cv::Mat1b apply_gamma_8(cv::Mat1b const &input, double const gamma);
 
 cv::Mat1b apply_gamma(cv::Mat const &input, double const gamma);
 
+int ceil_odd(int const val);
+
+cv::Mat3b denoiseValue(cv::Mat3b const &img, const int size = 10);
+
 }  // namespace Misc
 
 #endif  // MISC_H

@@ -211,6 +211,7 @@ void CameraManager::runCamera()
 void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 {
   cv::Mat3b colored = buf->exposureColored();
+  // colored = Misc::denoiseValue(colored);
   if (crosshairs) {
     drawCrosshairs(colored);
     if (crosshair_window) {
