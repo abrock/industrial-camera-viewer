@@ -211,10 +211,33 @@ void CameraManager::runCamera()
 void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 {
   cv::Mat3b colored = buf->exposureColored();
+  if (crosshairs) {
+    drawCrosshairs(colored);
+    if (crosshair_window) {
+      cv::Point center(colored.cols / 2, colored.rows / 2);
+      int const size = std::min(colored.cols, colored.rows) / 20;
+      cv::Rect roi(center.x - size, center.y - size, 2 * size, 2 * size);
+      cv::imshow(crosshair_window_name, colored(roi));
+    }
+    else {
+      cv::destroyWindow(crosshair_window_name);
+    }
+  }
   cv::imshow(window_name, downscale_if_neccessary(colored, max_width_shown));
   if (save_images > 0) {
     save_images--;
     std::thread(&Buffer::savePtr, buf).detach();
+  }
+}
+
+void CameraManager::drawCrosshairs(cv::Mat3b &img)
+{
+  cv::Vec3d const red(0, 0, 255);
+  for (int row = 0; row < img.rows; ++row) {
+    img(row, img.cols / 2) = red;
+  }
+  for (int col = 0; col < img.cols; ++col) {
+    img(img.rows / 2, col) = red;
   }
 }
 
@@ -331,6 +354,16 @@ void CameraManager::setGain(const double gain)
   arv_camera_set_gain(camera, requested_gain, &error);
   CHECK_EQ(nullptr, error) << error->message;
   println("Set gain time to {}", requested_gain);
+}
+
+void CameraManager::setCrosshairs(const bool val)
+{
+  crosshairs = val;
+}
+
+void CameraManager::setCrosshairWindow(const bool val)
+{
+  crosshair_window = val;
 }
 
 void CameraManager::stop()

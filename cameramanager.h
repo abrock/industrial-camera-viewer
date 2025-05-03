@@ -78,6 +78,8 @@ class CameraManager : public QObject {
 
   void process_image(std::shared_ptr<Buffer> buf);
 
+  void drawCrosshairs(cv::Mat3b &img);
+
   void stop();
 
   void runWaitKey();
@@ -93,7 +95,14 @@ class CameraManager : public QObject {
   Q_INVOKABLE void setExposure(const double exposure_us);
 
   Q_INVOKABLE void setGain(const double gain);
-signals:
+
+  bool crosshairs = false;
+  Q_INVOKABLE void setCrosshairs(const bool val);
+
+  std::string crosshair_window_name = "Crosshair";
+  bool crosshair_window = false;
+  Q_INVOKABLE void setCrosshairWindow(const bool val);
+ signals:
 
   void requestedExposure(int val);
 

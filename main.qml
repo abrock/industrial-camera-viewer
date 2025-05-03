@@ -26,6 +26,8 @@ Window {
                     id: set
                     property int exposure: 10000
                     property int gain: 0
+                    property bool crosshairs: false
+                    property bool crosshair_window: false
                 }
                 ColumnLayout {
                     anchors.topMargin: 9
@@ -71,6 +73,26 @@ Window {
                                 function onRequestedGain(val) {
                                     gain.value = val;
                                 }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Button {
+                            text: "Crosshairs"
+                            checkable: true
+                            checked: set.crosshairs
+                            onCheckedChanged: {
+                                set.crosshairs = checked
+                                cameraManager.setCrosshairs(checked)
+                            }
+                        }
+                        Button {
+                            text: "Crosshair window"
+                            checkable: true
+                            checked: set.crosshair_window
+                            onCheckedChanged: {
+                                set.crosshair_window = checked
+                                cameraManager.setCrosshairWindow(checked)
                             }
                         }
                     }
