@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 #include <fstream>
 
 #include "macros.hpp"
+#include "setfalseondestruct.h"
 #include "whitebalance.h"
 
 cv::Mat CameraManager::downscale_if_neccessary(const cv::Mat &input, size_t max_width)
@@ -214,6 +215,16 @@ void CameraManager::runCamera()
 void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 {
   PARALLELTIME_FUNCTION();
+  if (save_images > 0) {
+    save_images--;
+    std::thread(&Buffer::savePtr, buf).detach();
+  }
+  static bool process_running = false;
+  if (process_running) {
+    return;
+  }
+  process_running = true;
+  SetFalseOnDestruct set_false(process_running);
   cv::Mat3b colored = buf->exposureColored(this);
   if (denoise) {
     colored = Misc::denoiseValue(colored, denoise_scale);
@@ -226,15 +237,8 @@ void CameraManager::process_image(std::shared_ptr<Buffer> buf)
       cv::Rect roi(center.x - size, center.y - size, 2 * size, 2 * size);
       cv::imshow(crosshair_window_name, colored(roi));
     }
-    else {
-      cv::destroyWindow(crosshair_window_name);
-    }
   }
   cv::imshow(window_name, downscale_if_neccessary(colored, max_width_shown));
-  if (save_images > 0) {
-    save_images--;
-    std::thread(&Buffer::savePtr, buf).detach();
-  }
 }
 
 void CameraManager::drawCrosshairs(cv::Mat3b &img)
