@@ -83,6 +83,7 @@ set(LIB_SOURCES
     cameramanager.cpp
     dbusreceiver.cpp
     misc.cpp
+    whitebalance.cpp
 )
 
 set(PROJECT_SOURCES

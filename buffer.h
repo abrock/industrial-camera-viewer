@@ -5,6 +5,10 @@
 
 #include <opencv2/core.hpp>
 
+#include "cameramanager.h"
+
+class CameraManager;
+
 class Buffer {
   void make_img_8(ArvBuffer *buf);
   void make_img_12(ArvBuffer *buf);
@@ -68,7 +72,7 @@ class Buffer {
    * @brief exposureColored produces an image with overexposure indication
    * @return
    */
-  cv::Mat3b exposureColored() const;
+  cv::Mat3b exposureColored(CameraManager *manager = nullptr) const;
 
   /**
    * @brief Raw image provided by Aravis

@@ -4,6 +4,8 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <ParallelTime/paralleltime.h>
+
 #include "misc.h"
 using namespace Misc;
 
@@ -16,6 +18,7 @@ namespace fs = std::filesystem;
 #include <fstream>
 
 #include "macros.hpp"
+#include "whitebalance.h"
 
 cv::Mat CameraManager::downscale_if_neccessary(const cv::Mat &input, size_t max_width)
 {
@@ -210,8 +213,11 @@ void CameraManager::runCamera()
 
 void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 {
-  cv::Mat3b colored = buf->exposureColored();
-  // colored = Misc::denoiseValue(colored);
+  PARALLELTIME_FUNCTION();
+  cv::Mat3b colored = buf->exposureColored(this);
+  if (denoise) {
+    colored = Misc::denoiseValue(colored, denoise_scale);
+  }
   if (crosshairs) {
     drawCrosshairs(colored);
     if (crosshair_window) {
@@ -374,6 +380,44 @@ void CameraManager::setCrosshairs(const bool val)
 void CameraManager::setCrosshairWindow(const bool val)
 {
   crosshair_window = val;
+}
+
+void CameraManager::setAutoWB(const bool val)
+{
+  auto_wb = val;
+  println("Setting auto-WB to {}", auto_wb);
+}
+
+void CameraManager::setDenoise(const bool val)
+{
+  denoise = val;
+}
+
+void CameraManager::setDenoiseScale(const int val)
+{
+  denoise_scale = val;
+}
+
+void CameraManager::handleWhiteBalance(cv::Mat3b &img)
+{
+  WhiteBalance balance;
+  if (auto_wb) {
+    balance.calculateParameters(img, wb_min0, wb_max0, wb_min1, wb_max1, wb_min2, wb_max2);
+    emit requestedWBmin0(wb_min0);
+    emit requestedWBmin1(wb_min1);
+    emit requestedWBmin2(wb_min2);
+    emit requestedWBmax0(wb_max0);
+    emit requestedWBmax1(wb_max1);
+    emit requestedWBmax2(wb_max2);
+    println("WB parameters: \n{}\t{}\n{}\t{}\n{}\t{}",
+            wb_min0,
+            wb_max0,
+            wb_min1,
+            wb_max1,
+            wb_min2,
+            wb_max2);
+  }
+  balance.applyParameters(img, img, wb_min0, wb_max0, wb_min1, wb_max1, wb_min2, wb_max2);
 }
 
 void CameraManager::stop()

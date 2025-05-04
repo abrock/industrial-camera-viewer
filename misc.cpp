@@ -197,6 +197,8 @@ cv::Mat3b denoiseValue(const cv::Mat3b &img, int const size)
   cv::split(hsv, splitted);
   cv::medianBlur(splitted[0], splitted[0], ceil_odd(size));
   cv::medianBlur(splitted[1], splitted[1], ceil_odd(size));
+  // cv::GaussianBlur(splitted[0], splitted[0], cv::Size(), size, size);
+  // cv::GaussianBlur(splitted[1], splitted[1], cv::Size(), size, size);
   cv::merge(splitted, hsv);
   cv::cvtColor(hsv, hsv, cv::COLOR_HSV2BGR_FULL);
   return hsv;

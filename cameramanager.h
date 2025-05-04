@@ -15,6 +15,8 @@
 #include "buffer.h"
 #include "dbusreceiver.h"
 
+class Buffer;
+
 class CameraManager : public QObject {
   Q_OBJECT
 
@@ -102,11 +104,61 @@ class CameraManager : public QObject {
   std::string crosshair_window_name = "Crosshair";
   bool crosshair_window = false;
   Q_INVOKABLE void setCrosshairWindow(const bool val);
+
+  float wb_min0 = 0;
+  Q_INVOKABLE void setWBmin0(double val)
+  {
+    wb_min0 = val;
+  }
+  float wb_min1 = 0;
+  Q_INVOKABLE void setWBmin1(double val)
+  {
+    wb_min1 = val;
+  }
+  float wb_min2 = 0;
+  Q_INVOKABLE void setWBmin2(double val)
+  {
+    wb_min2 = val;
+  }
+  float wb_max0 = 0;
+  Q_INVOKABLE void setWBmax0(double val)
+  {
+    wb_max0 = val;
+  }
+  float wb_max1 = 0;
+  Q_INVOKABLE void setWBmax1(double val)
+  {
+    wb_max1 = val;
+  }
+  float wb_max2 = 0;
+  Q_INVOKABLE void setWBmax2(double val)
+  {
+    wb_max2 = val;
+  }
+
+  bool auto_wb = true;
+  Q_INVOKABLE void setAutoWB(bool const val);
+
+  bool denoise = true;
+  Q_INVOKABLE void setDenoise(bool const val);
+
+  int denoise_scale = 5;
+  Q_INVOKABLE void setDenoiseScale(int const val);
+
+  void handleWhiteBalance(cv::Mat3b &img);
+
  signals:
 
   void requestedExposure(int val);
 
   void requestedGain(int val);
+
+  void requestedWBmin0(double val);
+  void requestedWBmin1(double val);
+  void requestedWBmin2(double val);
+  void requestedWBmax0(double val);
+  void requestedWBmax1(double val);
+  void requestedWBmax2(double val);
 };
 
 #endif  // CAMERAMANAGER_H

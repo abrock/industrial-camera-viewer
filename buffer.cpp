@@ -101,7 +101,7 @@ void maskExposure(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
   }
 }
 
-cv::Mat3b Buffer::exposureColored() const
+cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
 {
   cv::Mat1b over_exposed = clippingMask(img);
   cv::dilate(
@@ -111,7 +111,9 @@ cv::Mat3b Buffer::exposureColored() const
   if (isBayer()) {
     cv::demosaicing(tmp, result, ArvExt::demosaicingVNG(pixel_format));
     cv::cvtColor(result, result, cv::COLOR_BGR2RGB);
-    cv::xphoto::createSimpleWB()->balanceWhite(result, result);
+    if (nullptr != manager) {
+      manager->handleWhiteBalance(result);
+    }
   }
   else {
     cv::merge(std::vector<cv::Mat>{tmp, tmp, tmp}, result);

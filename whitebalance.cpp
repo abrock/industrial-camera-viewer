@@ -43,6 +43,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include <ParallelTime/paralleltime.h>
+
 using namespace cv;
 
 template<typename T>
@@ -145,103 +147,130 @@ void applyParamsSimple(std::vector<Mat_<T>> &src,
   cv::merge(src, dst);
 }
 
-class SimpleWBImpl {
- private:
-  float inputMin, inputMax, outputMin, outputMax, p;
+float WhiteBalance::getInputMin() const
+{
+  return inputMin;
+}
 
- public:
-  SimpleWBImpl()
-  {
-    inputMin = 0.0f;
-    inputMax = 255.0f;
-    outputMin = 0.0f;
-    outputMax = 255.0f;
-    p = 2.0f;
-  }
+void WhiteBalance::setInputMin(float val)
+{
+  inputMin = val;
+}
 
-  float getInputMin() const
-  {
-    return inputMin;
-  }
-  void setInputMin(float val)
-  {
-    inputMin = val;
-  }
+float WhiteBalance::getInputMax() const
+{
+  return inputMax;
+}
 
-  float getInputMax() const
-  {
-    return inputMax;
-  }
-  void setInputMax(float val)
-  {
-    inputMax = val;
-  }
+void WhiteBalance::setInputMax(float val)
+{
+  inputMax = val;
+}
 
-  float getOutputMin() const
-  {
-    return outputMin;
-  }
-  void setOutputMin(float val)
-  {
-    outputMin = val;
-  }
+float WhiteBalance::getOutputMin() const
+{
+  return outputMin;
+}
 
-  float getOutputMax() const
-  {
-    return outputMax;
-  }
-  void setOutputMax(float val)
-  {
-    outputMax = val;
-  }
+void WhiteBalance::setOutputMin(float val)
+{
+  outputMin = val;
+}
 
-  float getP() const
-  {
-    return p;
-  }
-  void setP(float val)
-  {
-    p = val;
-  }
+float WhiteBalance::getOutputMax() const
+{
+  return outputMax;
+}
 
-  void calculateParameters(InputArray _src,
-                           float &min0,
-                           float &max0,
-                           float &min1,
-                           float &max1,
-                           float &min2,
-                           float &max2)
-  {
-    CV_Assert(!_src.empty());
-    CV_Assert(_src.depth() == CV_8U || _src.depth() == CV_16S || _src.depth() == CV_32S ||
-              _src.depth() == CV_32F);
-    Mat src = _src.getMat();
+void WhiteBalance::setOutputMax(float val)
+{
+  outputMax = val;
+}
 
-    switch (src.depth()) {
-      case CV_8U: {
-        std::vector<Mat_<uchar>> mv;
-        split(src, mv);
-        calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
-        break;
-      }
-      case CV_16S: {
-        std::vector<Mat_<short>> mv;
-        split(src, mv);
-        calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
-        break;
-      }
-      case CV_32S: {
-        std::vector<Mat_<int>> mv;
-        split(src, mv);
-        calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
-        break;
-      }
-      case CV_32F: {
-        std::vector<Mat_<float>> mv;
-        split(src, mv);
-        calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
-        break;
-      }
+float WhiteBalance::getP() const
+{
+  return p;
+}
+
+void WhiteBalance::setP(float val)
+{
+  p = val;
+}
+
+void WhiteBalance::calculateParameters(
+    InputArray _src, float &min0, float &max0, float &min1, float &max1, float &min2, float &max2)
+{
+  CV_Assert(!_src.empty());
+  CV_Assert(_src.depth() == CV_8U || _src.depth() == CV_16S || _src.depth() == CV_32S ||
+            _src.depth() == CV_32F);
+  Mat src = _src.getMat();
+
+  switch (src.depth()) {
+    case CV_8U: {
+      std::vector<Mat_<uchar>> mv;
+      split(src, mv);
+      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_16S: {
+      std::vector<Mat_<short>> mv;
+      split(src, mv);
+      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_32S: {
+      std::vector<Mat_<int>> mv;
+      split(src, mv);
+      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_32F: {
+      std::vector<Mat_<float>> mv;
+      split(src, mv);
+      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      break;
     }
   }
-};
+}
+
+void WhiteBalance::applyParameters(InputArray _src,
+                                   OutputArray _dst,
+                                   const float min0,
+                                   const float max0,
+                                   const float min1,
+                                   const float max1,
+                                   const float min2,
+                                   const float max2)
+{
+  CV_Assert(!_src.empty());
+  CV_Assert(_src.depth() == CV_8U || _src.depth() == CV_16S || _src.depth() == CV_32S ||
+            _src.depth() == CV_32F);
+  const Mat src = _src.getMat();
+  Mat &dst = _dst.getMatRef();
+  switch (src.depth()) {
+    case CV_8U: {
+      std::vector<Mat_<uchar>> mv;
+      split(src, mv);
+      applyParamsSimple(mv, dst, inputMin, inputMax, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_16S: {
+      std::vector<Mat_<short>> mv;
+      split(src, mv);
+      applyParamsSimple(mv, dst, inputMin, inputMax, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_32S: {
+      std::vector<Mat_<int>> mv;
+      split(src, mv);
+      applyParamsSimple(mv, dst, inputMin, inputMax, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+    case CV_32F: {
+      std::vector<Mat_<float>> mv;
+      split(src, mv);
+      applyParamsSimple(mv, dst, inputMin, inputMax, min0, max0, min1, max1, min2, max2);
+      break;
+    }
+  }
+}
