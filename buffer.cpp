@@ -87,7 +87,7 @@ cv::Mat1b Buffer::clippingMask(const cv::Mat &img)
   throw std::runtime_error("Function not implemented for given type");
 }
 
-void maskExposure(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
+void maskExposureColorImage(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
 {
   int const width = 20;
   for (int row = 0; row < img.rows; ++row) {
@@ -97,6 +97,18 @@ void maskExposure(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
       }
       int const position = (row - col + 2 * offset) % (2 * width);
       img(row, col) = position > width ? cv::Vec3b(0, 0, 0) : cv::Vec3b(255, 255, 255);
+    }
+  }
+}
+
+void maskExposureMonoImage(cv::Mat3b &img, cv::Mat1b const &mask, int const offset)
+{
+  for (int row = 0; row < img.rows; ++row) {
+    for (int col = 0; col < img.cols; ++col) {
+      if (mask(row, col) < 127) {
+        continue;
+      }
+      img(row, col) = cv::Vec3b(0, 0, 255);
     }
   }
 }
@@ -119,7 +131,12 @@ cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
     cv::merge(std::vector<cv::Mat>{tmp, tmp, tmp}, result);
   }
 
-  maskExposure(result, over_exposed, frame_id);
+  if (isBayer()) {
+    maskExposureColorImage(result, over_exposed, frame_id);
+  }
+  else {
+    maskExposureMonoImage(result, over_exposed, frame_id);
+  }
 
   return result;
 }
