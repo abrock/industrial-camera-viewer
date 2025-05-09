@@ -115,6 +115,9 @@ void maskExposureMonoImage(cv::Mat3b &img, cv::Mat1b const &mask, int const offs
 
 cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
 {
+  double min = 0;
+  double max = 0;
+  cv::minMaxIdx(img, &min, &max);
   cv::Mat1b over_exposed = clippingMask(img);
   cv::dilate(
       over_exposed, over_exposed, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
