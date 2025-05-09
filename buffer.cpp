@@ -68,7 +68,7 @@ cv::Mat1b Buffer::clippingMask(const cv::Mat1w &img)
   cv::Mat1b result(img.size(), uint8_t(0));
   for (int row = 0; row < img.rows; ++row) {
     for (int col = 0; col < img.cols; ++col) {
-      if (img(row, col) >= 4095 * 16) {
+      if (img(row, col) >= 4094 * 16) {
         result(row, col) = 255;
       }
     }
