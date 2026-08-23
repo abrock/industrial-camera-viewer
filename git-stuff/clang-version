@@ -18,8 +18,8 @@ fi
 VERSION=${arrIN[2]}
 arrVERSION=(${VERSION//./ })
 
-if [ "${arrVERSION[0]}" != "17" ]; then
-  echo "Expected clang-format version 17, got ${arrVERSION[0]} instead"
+if [ "${arrVERSION[0]}" != "20" ]; then
+  echo "Expected clang-format version 20, got ${arrVERSION[0]} instead"
   echo $IN
   exit 1
 fi

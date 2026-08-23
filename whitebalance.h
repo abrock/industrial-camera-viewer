@@ -9,7 +9,8 @@ class WhiteBalance {
   float inputMax = 255;
   float outputMin = 0;
   float outputMax = 255;
-  float p = 2;
+  int s1 = 20;
+  int s2 = 20;
 
  public:
   float getInputMin() const;
@@ -24,8 +25,9 @@ class WhiteBalance {
   float getOutputMax() const;
   void setOutputMax(float val);
 
-  float getP() const;
-  void setP(float val);
+  void setS1(int val);
+
+  void setS2(int val);
 
   void calculateParameters(cv::InputArray _src,
                            float &min0,

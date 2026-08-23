@@ -12,8 +12,10 @@
 #include <QMouseEvent>
 #include <QObject>
 
+#include "blocking-queue.hpp"
 #include "buffer.h"
 #include "dbusreceiver.h"
+#include "whitebalance.h"
 
 class Buffer;
 
@@ -22,7 +24,7 @@ class CameraManager : public QObject {
 
   std::mutex arv_mutex;
 
-  ArvCamera *camera;
+  ArvCamera *camera = nullptr;
   GError *error = nullptr;
 
   ArvPixelFormat pixel_format;
@@ -31,11 +33,17 @@ class CameraManager : public QObject {
 
   std::string window_name = "img";
 
+  std::mutex video_writer_mutex;
+
+  cv::VideoWriter video_writer;
+
   bool camera_running = false;
 
   double requested_exposure = 10'000;
 
   double requested_gain = 0;
+
+  WhiteBalance balance;
 
   /**
    * @brief Minimum gain value supported by the camera, typically zero.
@@ -73,10 +81,22 @@ class CameraManager : public QObject {
    */
   int save_images = 0;
 
+  void save_video_frame(cv::Mat const &img);
+
+  int videoWriteWorker();
+
+  bool save_video = false;
+  BQueue<std::shared_ptr<Buffer>> save_video_queue;
+  bool save_all_video_frames();
+
  public:
   CameraManager();
 
-  void runCamera();
+  void runCameraMainThread();
+
+  GMainLoop *main_loop;
+
+  void runCameraCallback();
 
   void process_image(std::shared_ptr<Buffer> buf);
 
@@ -85,6 +105,8 @@ class CameraManager : public QObject {
   void stop();
 
   void runWaitKey();
+
+  void runVideoWorker();
 
   void increaseExposureTime();
   void decreaseExposureTime();
@@ -136,6 +158,9 @@ class CameraManager : public QObject {
     wb_max2 = val;
   }
 
+  Q_INVOKABLE void setWBS1(int val);
+  Q_INVOKABLE void setWBS2(int val);
+
   bool auto_wb = true;
   Q_INVOKABLE void setAutoWB(bool const val);
 
@@ -145,7 +170,21 @@ class CameraManager : public QObject {
   int denoise_scale = 5;
   Q_INVOKABLE void setDenoiseScale(int const val);
 
-  void handleWhiteBalance(cv::Mat3b &img);
+  bool show_sharpness = false;
+  Q_INVOKABLE void setSharpness(const bool val);
+
+  Q_INVOKABLE void setSaveVideo(const bool val);
+
+  int crop = 100;
+  Q_INVOKABLE void setCrop(int const val);
+
+  Q_INVOKABLE void setTriggerSource(QString const &str);
+
+  Q_INVOKABLE void setModeContinuous();
+
+  Q_INVOKABLE void setModeSingle();
+
+  void handleWhiteBalance(cv::Mat3b &img, bool skip_auto_wb = false);
 
  signals:
 

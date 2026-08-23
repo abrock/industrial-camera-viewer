@@ -157,9 +157,10 @@ cv::Mat_<uint8_t> compress_16_8_lut(const cv::Mat_<uint16_t> &img, const std::ve
 
 cv::Mat1b apply_gamma(const cv::Mat &input, const double gamma)
 {
-  if (input.channels() > 1) {
+  cv::Mat clone = input.clone();
+  if (clone.channels() > 1) {
     std::vector<cv::Mat> splitted;
-    cv::split(input, splitted);
+    cv::split(clone, splitted);
     for (cv::Mat &channel : splitted) {
       channel = apply_gamma(channel, gamma);
     }
@@ -167,11 +168,11 @@ cv::Mat1b apply_gamma(const cv::Mat &input, const double gamma)
     cv::merge(splitted, result);
     return result;
   }
-  if (input.depth() == 2) {
+  if (clone.depth() == 2) {
     std::vector<uint8_t> lut = get_gamma_lut(gamma);
-    return compress_16_8_lut(input, lut);
+    return compress_16_8_lut(clone, lut);
   }
-  return apply_gamma_8(input, gamma);
+  return apply_gamma_8(clone, gamma);
 }
 
 cv::Mat1b apply_gamma_8(const cv::Mat1b &input, const double gamma)
@@ -179,7 +180,10 @@ cv::Mat1b apply_gamma_8(const cv::Mat1b &input, const double gamma)
   cv::Mat1b result(input);
   std::vector<uint8_t> lut;
   for (size_t ii = 0; ii <= 255; ++ii) {
-    lut.push_back(std::sqrt(double(ii)) * std::sqrt(255));
+    double val = double(ii) / 255.0;
+    val = std::pow(val, gamma);
+    val *= 255;
+    lut.push_back(std::round(val));
   }
   for (int row = 0; row < result.rows; ++row) {
     for (int col = 0; col < result.cols; ++col) {

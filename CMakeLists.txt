@@ -39,6 +39,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -pthread -fopenmp ")
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # Tells GCC/Clang to strip CMAKE_SOURCE_DIR from __FILE__
+    add_compile_options("-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=")
+elseif(MSVC)
+    # Tells MSVC to use relative paths for __FILE__
+    add_compile_options("/FC")
+endif()
+
 # Force using Qt5 because of otherwise QtQuick.Controls 1.4 is not available
 find_package(QT REQUIRED COMPONENTS Core NAMES Qt5)
 
@@ -73,7 +81,10 @@ set(COMMON_LIBS
     Qt${QT_VERSION_MAJOR}::DBus
     fmt::fmt
     libaravis-0.8.so
-    glib-2.0 gio-2.0 gobject-2.0 gthread-2.0
+    glib-2.0
+    gio-2.0
+    gobject-2.0
+    gthread-2.0
     ParallelTime
 )
 
@@ -87,10 +98,7 @@ set(LIB_SOURCES
     whitebalance.cpp
 )
 
-set(PROJECT_SOURCES
-        main.cpp
-        qml.qrc
-)
+set(PROJECT_SOURCES main.cpp qml.qrc)
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(industrial-camera-viewer
@@ -99,42 +107,37 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${LIB_SOURCES}
     )
 else()
-    add_executable(industrial-camera-viewer
-        ${PROJECT_SOURCES}
-        ${LIB_SOURCES}
-    )
-    add_executable(tests tests.cpp
-        ${LIB_SOURCES}
-    )
+    add_executable(industrial-camera-viewer ${PROJECT_SOURCES} ${LIB_SOURCES})
 endif()
 
-target_link_libraries(tests
-    GTest::gtest
-    ${COMMON_LIBS}
+add_executable(tests tests.cpp test-mcheck.cpp ${LIB_SOURCES})
+target_link_libraries(tests GTest::gtest ${COMMON_LIBS})
+
+target_link_libraries(industrial-camera-viewer ${COMMON_LIBS})
+
+add_executable(
+    industrial-camera-viewer-dbus-sender
+    camera-viewer-dbus-sender.cpp
 )
 
+target_link_libraries(industrial-camera-viewer-dbus-sender ${COMMON_LIBS})
 
-target_link_libraries(industrial-camera-viewer
-  ${COMMON_LIBS}
+set_target_properties(
+    industrial-camera-viewer
+    PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING
+            ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+        MACOSX_BUNDLE TRUE
+        WIN32_EXECUTABLE TRUE
 )
 
-add_executable(industrial-camera-viewer-dbus-sender camera-viewer-dbus-sender.cpp)
-
-target_link_libraries(industrial-camera-viewer-dbus-sender
-    ${COMMON_LIBS}
-)
-
-set_target_properties(industrial-camera-viewer PROPERTIES
-    MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com
-    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-    MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE TRUE
-)
-
-install(TARGETS industrial-camera-viewer
+install(
+    TARGETS industrial-camera-viewer
     BUNDLE DESTINATION .
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_import_qml_plugins(industrial-camera-viewer)
@@ -143,3 +146,22 @@ if(QT_VERSION_MAJOR EQUAL 6)
     qt_import_qml_plugins(tests)
     qt_finalize_executable(tests)
 endif()
+
+add_executable(
+    v4l2-recording
+    v4l2-recording.cpp
+    v4l2_utils.cpp
+    misc.cpp
+    time.cpp
+)
+target_link_libraries(
+    v4l2-recording
+    v4l2
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::DBus
+    Qt${QT_VERSION_MAJOR}::Quick
+    Qt${QT_VERSION_MAJOR}::Widgets
+    ${OpenCV_LIBRARIES}
+    ParallelTime
+    fmt::fmt
+)

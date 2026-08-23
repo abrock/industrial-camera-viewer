@@ -51,7 +51,8 @@ template<typename T>
 void calculateParamsSimple(std::vector<Mat_<T>> &src,
                            const float inputMin,
                            const float inputMax,
-                           const float p,
+                           const int s1,
+                           const int s2,
                            float &min0,
                            float &max0,
                            float &min1,
@@ -59,9 +60,6 @@ void calculateParamsSimple(std::vector<Mat_<T>> &src,
                            float &min2,
                            float &max2)
 {
-  const float s1 = p;  // low quantile
-  const float s2 = p;  // high quantile
-
   const int nElements = src[0].depth() == CV_8U ? 256 : 4096;
 
   float minValue0 = inputMin;
@@ -100,12 +98,12 @@ void calculateParamsSimple(std::vector<Mat_<T>> &src,
     int n1 = 0, n2 = total;
 
     // searching for s1 and s2
-    while (n1 + hist.at<float>(p1) < s1 * total / 100.0f) {
+    while (n1 + hist.at<float>(p1) < float(s1) * total / 1000.0f) {
       n1 += saturate_cast<int>(hist.at<float>(p1++));
       minValue += interval;
     }
 
-    while (n2 - hist.at<float>(p2) > (100.0f - s2) * total / 100.0f) {
+    while (n2 - hist.at<float>(p2) > (1000.0f - float(s2)) * total / 1000.0f) {
       n2 -= saturate_cast<int>(hist.at<float>(p2--));
       maxValue -= interval;
     }
@@ -187,14 +185,14 @@ void WhiteBalance::setOutputMax(float val)
   outputMax = val;
 }
 
-float WhiteBalance::getP() const
+void WhiteBalance::setS1(int val)
 {
-  return p;
+  s1 = val;
 }
 
-void WhiteBalance::setP(float val)
+void WhiteBalance::setS2(int val)
 {
-  p = val;
+  s2 = val;
 }
 
 void WhiteBalance::calculateParameters(
@@ -209,25 +207,25 @@ void WhiteBalance::calculateParameters(
     case CV_8U: {
       std::vector<Mat_<uchar>> mv;
       split(src, mv);
-      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      calculateParamsSimple(mv, inputMin, inputMax, s1, s2, min0, max0, min1, max1, min2, max2);
       break;
     }
     case CV_16S: {
       std::vector<Mat_<short>> mv;
       split(src, mv);
-      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      calculateParamsSimple(mv, inputMin, inputMax, s1, s2, min0, max0, min1, max1, min2, max2);
       break;
     }
     case CV_32S: {
       std::vector<Mat_<int>> mv;
       split(src, mv);
-      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      calculateParamsSimple(mv, inputMin, inputMax, s1, s2, min0, max0, min1, max1, min2, max2);
       break;
     }
     case CV_32F: {
       std::vector<Mat_<float>> mv;
       split(src, mv);
-      calculateParamsSimple(mv, inputMin, inputMax, p, min0, max0, min1, max1, min2, max2);
+      calculateParamsSimple(mv, inputMin, inputMax, s1, s2, min0, max0, min1, max1, min2, max2);
       break;
     }
   }

@@ -26,6 +26,8 @@ Window {
                     id: set
                     property int exposure: 10000
                     property int gain: 0
+                    property int wb_s1: 20
+                    property int wb_s2: 20
                     property int min0: 0
                     property int min1: 0
                     property int min2: 0
@@ -37,6 +39,9 @@ Window {
                     property bool auto_wb: true
                     property bool denoise: true
                     property int denoise_scale: 5
+
+                    property bool sharpness: false
+                    property int crop: 100
                 }
                 ColumnLayout {
                     anchors.topMargin: 9
@@ -82,6 +87,33 @@ Window {
                                 function onRequestedGain(val) {
                                     gain.value = val;
                                 }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Button {
+                            text: "Save video"
+                            checkable: true;
+                            id: save_video
+                            onCheckedChanged: {
+                                cameraManager.setSaveVideo(save_video.checked);
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Text {
+                            text: qsTr("Trigger Source: ")
+                        }
+                        Button {
+                            text: "Software"
+                            onClicked: {
+                                cameraManager.setTriggerSource("Software")
+                            }
+                        }
+                        Button {
+                            text: "Line0"
+                            onClicked: {
+                                cameraManager.setTriggerSource("Line0")
                             }
                         }
                     }
@@ -136,6 +168,36 @@ Window {
                                 set.auto_wb = checked
                                 cameraManager.setAutoWB(checked)
                             }
+                        }
+                        Text {
+                            text: "S1"
+                        }
+                        SpinBox {
+                            value: set.wb_s1
+                            stepSize: 1
+                            minimumValue: 0
+                            maximumValue: 499
+                            id: wb_s1
+                            onValueChanged: {
+                                set.wb_s1 = value
+                                cameraManager.setWBS1(value)
+                            }
+                            Component.onCompleted: cameraManager.setWBS1(value)
+                        }
+                        Text {
+                            text: "S2"
+                        }
+                        SpinBox {
+                            value: set.wb_s2
+                            stepSize: 1
+                            minimumValue: 0
+                            maximumValue: 499
+                            id: wb_s2
+                            onValueChanged: {
+                                set.wb_s2 = value
+                                cameraManager.setWBS2(value)
+                            }
+                            Component.onCompleted: cameraManager.setWBS2(value)
                         }
                     }
                     RowLayout {
@@ -253,6 +315,31 @@ Window {
                                     max2.value = val
                                 }
                             }
+                        }
+                    }
+                    RowLayout {
+                        Button {
+                            text: "Sharpness"
+                            checkable: true
+                            checked: set.sharpness
+                            onCheckedChanged: {
+                                set.sharpness = checked
+                                cameraManager.setSharpness(checked)
+                            }
+                        }
+                        Text {
+                            text: "Crop"
+                        }
+                        SpinBox {
+                            value: set.crop
+                            stepSize: 1
+                            maximumValue: 100
+                            id: crop
+                            onValueChanged: {
+                                set.crop = value
+                                cameraManager.setCrop(value)
+                            }
+                            Component.onCompleted: cameraManager.setCrop(value)
                         }
                     }
                 }

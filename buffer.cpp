@@ -113,8 +113,34 @@ void maskExposureMonoImage(cv::Mat3b &img, cv::Mat1b const &mask, int const offs
   }
 }
 
+cv::Mat3b Buffer::videoImage(CameraManager *manager) const
+{
+  cv::Mat3b result;
+  if (img.empty()) {
+    return result;
+  }
+  cv::Mat clone = img.clone();
+  cv::Mat1b tmp = Misc::apply_gamma(clone, 1.0 / 2.0);
+  if (isBayer()) {
+    cv::demosaicing(tmp, result, ArvExt::demosaicingVNG(pixel_format));
+    cv::cvtColor(result, result, cv::COLOR_BGR2RGB);
+    if (nullptr != manager) {
+      manager->handleWhiteBalance(result, true);
+    }
+  }
+  else {
+    cv::merge(std::vector<cv::Mat>{tmp, tmp, tmp}, result);
+  }
+
+  return result;
+}
+
 cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
 {
+  cv::Mat3b result;
+  if (img.empty()) {
+    return result;
+  }
   double min = 0;
   double max = 0;
   cv::minMaxIdx(img, &min, &max);
@@ -122,7 +148,6 @@ cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
   cv::dilate(
       over_exposed, over_exposed, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
   cv::Mat1b tmp = Misc::apply_gamma(img, 1.0 / 2.0);
-  cv::Mat3b result;
   if (isBayer()) {
     cv::demosaicing(tmp, result, ArvExt::demosaicingVNG(pixel_format));
     cv::cvtColor(result, result, cv::COLOR_BGR2RGB);
@@ -296,4 +321,14 @@ Buffer::Buffer(ArvBuffer *buf)
                 min,
                 max);
                 */
+}
+
+cv::Mat1b Buffer::get_raw_8() const
+{
+  if (CV_8UC1 == img.type() || CV_8SC1 == img.type()) {
+    return img;
+  }
+  cv::Mat1b result;
+  img.convertTo(result, CV_8UC1, 1.0 / 256);
+  return result;
 }

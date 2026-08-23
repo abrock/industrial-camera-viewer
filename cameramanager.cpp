@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/videostab/deblurring.hpp>
 
 #include <ParallelTime/paralleltime.h>
 
@@ -126,6 +127,89 @@ void CameraManager::auto_assign_depth()
   delete[] format_strings;
 }
 
+void CameraManager::save_video_frame(const cv::Mat &img)
+{
+  if (!video_writer.isOpened()) {
+    int ii = 0;
+    std::string filename;
+    do {
+      filename = fmt::format("cameramanager-rec-{:04}.avi", ii++);
+    } while (fs::exists(filename));
+    int codec = cv::VideoWriter::fourcc(
+        'M',
+        'J',
+        'P',
+        'G');           // select desired codec (must be available at runtime)
+    double fps = 25.0;  // framerate of the created video stream
+    video_writer.open(filename, codec, fps, img.size(), img.channels() > 1);
+  }
+  if (!video_writer.isOpened()) {
+    std::cerr << "Could not open the output video file for write" << std::endl;
+    return;
+  }
+  video_writer << img;
+}
+
+#if 0  // Parallel version
+int CameraManager::videoWriteWorker()
+{
+  std::lock_guard guard(video_writer_mutex);
+  ParallelTime t;
+  std::vector<std::shared_ptr<Buffer>> buffers;
+  while (!save_video_queue.empty()) {
+    buffers.push_back(save_video_queue.pop());
+  }
+
+  std::vector<cv::Mat3b> images(buffers.size());
+#  pragma omp parallel for schedule(dynamic, 1)
+  for (size_t ii = 0; ii < buffers.size(); ++ii) {
+    std::shared_ptr<Buffer> buf = buffers[ii];
+    cv::Mat3b &img = images[ii];
+    img = buf->videoImage(this);
+    if (!img.empty()) {
+      img = downscale_if_neccessary(img, max_width_shown);
+    }
+  }
+
+  for (size_t ii = 0; ii < images.size(); ++ii) {
+    save_video_frame(images[ii]);
+  }
+  if (images.size() > 0) {
+    println("Video write worker pushed {} frames, time: {}", images.size(), t.print());
+  }
+  return images.size();
+}
+#endif
+
+int CameraManager::videoWriteWorker()
+{
+  std::lock_guard guard(video_writer_mutex);
+  ParallelTime t;
+  int count = 0;
+  bool save_video_was_false = false;
+  while (!save_video_queue.empty()) {
+    auto buf = save_video_queue.pop();
+    cv::Mat3b img = buf->videoImage(this);
+    if (!img.empty()) {
+      count++;
+      save_video_frame(img);
+      if (!save_video && !save_video_was_false) {
+        save_video_was_false = true;
+        std::cout << std::string(save_video_queue.size(), '+') << std::endl;
+      }
+      if (!save_video) {
+        std::cout << "-" << std::flush;
+      }
+    }
+  }
+
+  if (count > 0) {
+    std::cout << std::endl;
+    println("Video write worker pushed {} frames, time: {}", count, t.print());
+  }
+  return count;
+}
+
 CameraManager::CameraManager()
 {
   if ("i3" == Misc::envVar("XDG_CURRENT_DESKTOP") || "i3" == Misc::envVar("GDMSESSION")) {
@@ -134,7 +218,7 @@ CameraManager::CameraManager()
   }
 }
 
-void CameraManager::runCamera()
+void CameraManager::runCameraMainThread()
 {
   println("Running CameraManager::runCamera");
 
@@ -181,6 +265,12 @@ void CameraManager::runCamera()
   arv_camera_start_acquisition(camera, &error);
   CHECK_EQ(nullptr, error) << error->message;
 
+  arv_camera_set_exposure_time_auto(camera, ARV_AUTO_OFF, &error);
+  CHECK_EQ(nullptr, error) << error->message;
+
+  arv_camera_set_gain_auto(camera, ARV_AUTO_OFF, &error);
+  CHECK_EQ(nullptr, error) << error->message;
+
   camera_running = true;
   setExposure(requested_exposure);
   setGain(requested_gain);
@@ -212,20 +302,137 @@ void CameraManager::runCamera()
   g_clear_object(&camera);
 }
 
+void new_buffer_cb(ArvStream *stream, void *user_data)
+{
+  ArvBuffer *buffer;
+
+  /* This code is called from the stream receiving thread, which means all the time spent there is
+   * less time available for the reception of incoming packets */
+
+  buffer = arv_stream_pop_buffer(stream);
+
+  if (ARV_IS_BUFFER(buffer)) {
+    std::shared_ptr<Buffer> buf = std::make_shared<Buffer>(buffer);
+    std::thread(&CameraManager::process_image, static_cast<CameraManager *>(user_data), buf)
+        .detach();
+
+    /* Don't destroy the buffer, but put it back into the buffer pool */
+    arv_stream_push_buffer(stream, buffer);
+  }
+}
+
+void CameraManager::runCameraCallback()
+{
+  GError *error = nullptr;
+
+  main_loop = g_main_loop_new(nullptr, FALSE);
+
+  /* Connect to the first available camera */
+  camera = arv_camera_new(nullptr, &error);
+
+  if (ARV_IS_CAMERA(camera)) {
+    ArvStream *stream = nullptr;
+
+    printf("Found camera '%s'\n", arv_camera_get_model_name(camera, nullptr));
+
+    EXEC_AND_CHECK(
+        arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_CONTINUOUS, &error));
+
+    if (error == nullptr)
+      /* Create the stream object without callback */
+      EXEC_AND_CHECK(stream = arv_camera_create_stream(camera, nullptr, nullptr, &error));
+
+    if (ARV_IS_STREAM(stream)) {
+      size_t payload;
+
+      /* Retrieve the payload size for buffer creation */
+      EXEC_AND_CHECK(payload = arv_camera_get_payload(camera, &error));
+      if (error == nullptr) {
+        /* Insert some buffers in the stream buffer pool */
+        for (int ii = 0; ii < 5; ii++)
+          arv_stream_push_buffer(stream, arv_buffer_new(payload, nullptr));
+      }
+
+      g_signal_connect(stream, "new-buffer", G_CALLBACK(new_buffer_cb), this);
+      arv_stream_set_emit_signals(stream, TRUE);
+
+      // 1. Set the trigger source (e.g., "Line0")
+      EXEC_AND_CHECK(arv_camera_set_trigger_source(camera, "Line0", &error));
+
+      // 2. Enable external trigger mode on that source
+      EXEC_AND_CHECK(arv_camera_set_trigger(camera, "Line0", &error));
+
+      // Optional: Configure activation edge via GenICam device feature access
+      ArvDevice *device = arv_camera_get_device(camera);
+      EXEC_AND_CHECK(
+          arv_device_set_string_feature_value(device, "TriggerSelector", "FrameStart", &error));
+      EXEC_AND_CHECK(
+          arv_device_set_string_feature_value(device, "TriggerActivation", "RisingEdge", &error));
+
+      if (error == nullptr)
+        /* Start the acquisition */
+        EXEC_AND_CHECK(arv_camera_start_acquisition(camera, &error));
+
+      EXEC_AND_CHECK(arv_camera_set_exposure_time_auto(camera, ARV_AUTO_OFF, &error));
+      EXEC_AND_CHECK(arv_camera_set_gain_auto(camera, ARV_AUTO_OFF, &error));
+
+      camera_running = true;
+
+      setExposure(requested_exposure);
+      setGain(requested_gain);
+
+      if (error == nullptr)
+        g_main_loop_run(main_loop);
+
+      if (error == nullptr)
+        /* Stop the acquisition */
+        EXEC_AND_CHECK(arv_camera_stop_acquisition(camera, &error));
+
+      arv_stream_set_emit_signals(stream, FALSE);
+
+      /* Destroy the stream object */
+      g_clear_object(&stream);
+    }
+
+    /* Destroy the camera instance */
+    g_clear_object(&camera);
+  }
+
+  g_main_loop_unref(main_loop);
+
+  if (error != nullptr) {
+    /* En error happened, display the correspdonding message */
+    printf("Error: %s\n", error->message);
+  }
+}
+
 void CameraManager::process_image(std::shared_ptr<Buffer> buf)
 {
-  PARALLELTIME_FUNCTION();
   if (save_images > 0) {
     save_images--;
     std::thread(&Buffer::savePtr, buf).detach();
   }
+  if (save_video) {
+    save_video_queue.push(buf);
+  }
+#if 0
+  for (int ii = 0; ii < 5; ++ii) {
+      cv::Mat3b img = buf->exposureColored(this);
+      cv::imwrite("test-" + std::to_string(ii) + ".jpg", img);
+  }
+  abort();
+#endif
   static bool process_running = false;
   if (process_running) {
     return;
   }
+  PARALLELTIME_FUNCTION();
   process_running = true;
   SetFalseOnDestruct set_false(process_running);
   cv::Mat3b colored = buf->exposureColored(this);
+  if (colored.empty()) {
+    return;
+  }
   if (denoise) {
     colored = Misc::denoiseValue(colored, denoise_scale);
   }
@@ -238,7 +445,21 @@ void CameraManager::process_image(std::shared_ptr<Buffer> buf)
       cv::imshow(crosshair_window_name, colored(roi));
     }
   }
-  cv::imshow(window_name, downscale_if_neccessary(colored, max_width_shown));
+  int const x = (colored.size().width * (100 - crop)) / 200;
+  int const y = (colored.size().height * (100 - crop)) / 200;
+  int const width = colored.size().width - 2 * x;
+  int const height = colored.size().height - 2 * y;
+  cv::Rect const roi(x, y, width, height);
+  if (100 != crop) {
+    colored = colored(roi);
+  }
+  if (show_sharpness) {
+    double const sharpness = 100 *
+                             (1.0 - 1000 * cv::videostab::calcBlurriness(buf->get_raw_8()(roi)));
+    Misc::println("Sharpness: {:3.3f}", sharpness);
+  }
+  cv::Mat3b downscaled = downscale_if_neccessary(colored, max_width_shown);
+  cv::imshow(window_name, downscaled);
 }
 
 void CameraManager::drawCrosshairs(cv::Mat3b &img)
@@ -289,6 +510,15 @@ void CameraManager::runWaitKey()
     }
     if (key >= 0) {
       println("Key: {} ({})", key, int(key));
+    }
+  }
+}
+
+void CameraManager::runVideoWorker()
+{
+  while (!stopped) {
+    if (videoWriteWorker() < 1) {
+      sleep(1);
     }
   }
 }
@@ -386,6 +616,16 @@ void CameraManager::setCrosshairWindow(const bool val)
   crosshair_window = val;
 }
 
+void CameraManager::setWBS1(int val)
+{
+  balance.setS1(val);
+}
+
+void CameraManager::setWBS2(int val)
+{
+  balance.setS2(val);
+}
+
 void CameraManager::setAutoWB(const bool val)
 {
   auto_wb = val;
@@ -402,10 +642,58 @@ void CameraManager::setDenoiseScale(const int val)
   denoise_scale = val;
 }
 
-void CameraManager::handleWhiteBalance(cv::Mat3b &img)
+void CameraManager::setSharpness(const bool val)
 {
-  WhiteBalance balance;
-  if (auto_wb) {
+  show_sharpness = val;
+}
+
+void CameraManager::setSaveVideo(const bool val)
+{
+  save_video = val;
+  println("Save video: {}", save_video);
+  if (!val) {
+    std::lock_guard guard(video_writer_mutex);
+    if (video_writer.isOpened()) {
+      video_writer.release();
+    }
+  }
+}
+
+void CameraManager::setCrop(const int val)
+{
+  crop = std::clamp(val, 1, 100);
+}
+
+void CameraManager::setTriggerSource(const QString &str)
+{
+  std::string val = str.toStdString();
+  println("Trying to set trigger source {}", val);
+  GError *error = nullptr;
+  std::lock_guard guard(arv_mutex);
+  EXEC_AND_CHECK(arv_camera_set_trigger_source(camera, val.c_str(), &error));
+  if (nullptr != error) {
+    println("Error: {}", error->message);
+  }
+  EXEC_AND_CHECK(
+      println("Trigger source was set to {}", arv_camera_get_trigger_source(camera, &error)));
+}
+
+void CameraManager::setModeContinuous()
+{
+  println("Setting acquisition mode to continuous");
+  EXEC_AND_CHECK(arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_CONTINUOUS, &error));
+}
+
+void CameraManager::setModeSingle()
+{
+  println("Setting acquisition mode to single");
+  EXEC_AND_CHECK(
+      arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_SINGLE_FRAME, &error));
+}
+
+void CameraManager::handleWhiteBalance(cv::Mat3b &img, bool skip_auto_wb)
+{
+  if (auto_wb && !skip_auto_wb) {
     balance.calculateParameters(img, wb_min0, wb_max0, wb_min1, wb_max1, wb_min2, wb_max2);
     emit requestedWBmin0(wb_min0);
     emit requestedWBmin1(wb_min1);

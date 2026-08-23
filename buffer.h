@@ -74,10 +74,14 @@ class Buffer {
    */
   cv::Mat3b exposureColored(CameraManager *manager = nullptr) const;
 
+  cv::Mat3b videoImage(CameraManager *manager) const;
+
   /**
    * @brief Raw image provided by Aravis
    */
   cv::Mat img;
+
+  cv::Mat1b get_raw_8() const;
 
   void save(std::string const &fn) const;
 
