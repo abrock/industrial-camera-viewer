@@ -207,6 +207,9 @@ int CameraManager::videoWriteWorker()
     std::cout << std::endl;
     println("Video write worker pushed {} frames, time: {}", count, t.print());
   }
+  if (!save_video) {
+    video_writer.release();
+  }
   return count;
 }
 
@@ -653,9 +656,6 @@ void CameraManager::setSaveVideo(const bool val)
   println("Save video: {}", save_video);
   if (!val) {
     std::lock_guard guard(video_writer_mutex);
-    if (video_writer.isOpened()) {
-      video_writer.release();
-    }
   }
 }
 
