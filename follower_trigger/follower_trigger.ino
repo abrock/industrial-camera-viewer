@@ -4,11 +4,30 @@
 
 #define millis_t unsigned long
 
+/*
+Functions of the Fahrstuhlklemmen from top to botom:
+1. GND
+2. Signal input
+3. Signal output
+4. +5V for light barrier or other sensor power supply.
+
+Colors of the cable for the light barrier:
+brown: VCC
+black: GND
+yellow-green: signal
+
+
+*/
+
+// Force a trigger if no inut has been detected for the given number of milliseconds.
+// Set to zero to disable.
+uint16_t max_time_between_triggers = 0;
+
 // Only use every n-th input trigger, completely ignore all in-between.
-uint8_t n_th_frame = 2;
+uint8_t n_th_frame = 1;
 
 // Minimum time between two output trigger events.
-uint16_t min_time_between_triggers = 70;
+uint16_t min_time_between_triggers = 260;
 
 // Time of the next scheduled lowering of the output pin
 millis_t lower_tgt = 0;
@@ -92,11 +111,15 @@ void setup()
 void loop()
 {
   millis_t time = millis();
-  if (time > previous_output_trigger + 500 && time > last_input_rising + 500) {
-    digitalWrite(OUTPUT_PIN, HIGH);
-    previous_output_trigger = time;
-    todo_lower = true;
-    lower_tgt = time + 20;
+  if (max_time_between_triggers > 0) {
+    if (time > previous_output_trigger + max_time_between_triggers &&
+        time > last_input_rising + max_time_between_triggers)
+    {
+      digitalWrite(OUTPUT_PIN, HIGH);
+      previous_output_trigger = time;
+      todo_lower = true;
+      lower_tgt = time + 20;
+    }
   }
   if (todo_lower) {
     if (time > lower_tgt) {

@@ -26,6 +26,12 @@ std::vector<std::string> splitString(const std::string &in, const char s);
 
 void unpack12_16(uchar *dst, const uchar *src, size_t const input_size);
 
+// Unpacks Mono12P (USB3 Vision style packing)
+void unpack12P(const uint8_t *src, uint16_t *dst, size_t pixel_count);
+
+// Unpacks Mono12Packed (GigE Vision style packing)
+void unpack12Packed(const uint8_t *src, uint16_t *dst, size_t pixel_count);
+
 /**
  * @brief type2str takes an OpenCV pixel type and returns a human-readable string.
  * @param type

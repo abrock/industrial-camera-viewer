@@ -25,6 +25,7 @@ class CameraManager : public QObject {
   std::mutex arv_mutex;
 
   ArvCamera *camera = nullptr;
+  ArvDevice *device = nullptr;
   GError *error = nullptr;
 
   ArvPixelFormat pixel_format;
@@ -38,10 +39,6 @@ class CameraManager : public QObject {
   cv::VideoWriter video_writer;
 
   bool camera_running = false;
-
-  double requested_exposure = 10'000;
-
-  double requested_gain = 0;
 
   WhiteBalance balance;
 
@@ -61,6 +58,8 @@ class CameraManager : public QObject {
   size_t max_width_shown = 1600;
 
   cv::Rect current_roi;
+
+  static double downscale_factor(const cv::Mat &input, size_t max_width);
 
   /**
    * @brief downscale_if_neccessary scales an image down if its width is larger than a given
@@ -91,6 +90,12 @@ class CameraManager : public QObject {
 
  public:
   CameraManager();
+
+  double requested_exposure = 10'000;
+
+  double requested_gain = 0;
+
+  std::string make;
 
   void runCameraMainThread();
 
@@ -183,6 +188,10 @@ class CameraManager : public QObject {
   Q_INVOKABLE void setModeContinuous();
 
   Q_INVOKABLE void setModeSingle();
+
+  Q_INVOKABLE void softwareTrigger();
+
+  Q_INVOKABLE void saveAllImages(bool val);
 
   void handleWhiteBalance(cv::Mat3b &img, bool skip_auto_wb = false);
 

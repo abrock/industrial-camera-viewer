@@ -11,6 +11,115 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+#include <ParallelTime/paralleltime.h>
+
+#define TINY_DNG_WRITER_IMPLEMENTATION
+#include "tiny_dng_writer.h"
+
+bool const big_endian = false;
+
+#include "zstd-writer.h"
+
+void setup_image(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
+{
+  dng_image.SetBigEndian(big_endian);
+  unsigned int image_width = img.size().width;
+  unsigned int image_height = img.size().height;
+  dng_image.SetSubfileType(false, false, false);
+  dng_image.SetImageWidth(image_width);
+  dng_image.SetImageLength(image_height);
+  // We do not yet support multiple strips per image, so must set RowsPerStrip to image.height.
+  // TODO: https://github.com/syoyo/tinydng/issues/40
+  dng_image.SetRowsPerStrip(image_height);
+  dng_image.SetPlanarConfig(tinydngwriter::PLANARCONFIG_CONTIG);
+  dng_image.SetCompression(tinydngwriter::COMPRESSION_NONE);
+  dng_image.SetPhotometric(tinydngwriter::PHOTOMETRIC_CFA);
+  dng_image.SetXResolution(300.0);
+  dng_image.SetYResolution(300.0);
+  dng_image.SetOrientation(tinydngwriter::ORIENTATION_TOPLEFT);
+  dng_image.SetResolutionUnit(tinydngwriter::RESUNIT_NONE);
+  dng_image.SetImageDescription("Some image description");
+  dng_image.SetUniqueCameraModel("Some camera model");
+
+  dng_image.SetDNGVersion(1, 2, 0, 0);
+
+  dng_image.SetCFARepeatPatternDim(2, 2);
+
+  uint8_t cfa_pattern[4] = {0, 1, 1, 2};
+  dng_image.SetCFAPattern(4, cfa_pattern);
+}
+
+void finalize_write(tinydngwriter::DNGImage &dng_image, std::string const fn)
+{
+  tinydngwriter::DNGWriter dng_writer(big_endian);
+  bool ret = dng_writer.AddImage(&dng_image);
+  if (!ret) {
+    std::cout << "AddImage failed for " << fn << std::endl;
+    return;
+  }
+
+  std::string err;
+  ret = dng_writer.WriteToFile(fn.c_str(), &err);
+
+  if (!err.empty()) {
+    std::cerr << err;
+  }
+
+  if (!ret) {
+    std::cout << "WriteToFile failed for " << fn << std::endl;
+    return;
+  }
+}
+
+void write_uint8_t(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
+{
+  dng_image.SetSamplesPerPixel(1);
+  uint16_t bps[1] = {8};
+  dng_image.SetBitsPerSample(1, bps);
+
+  dng_image.SetImageData(img.data, img.size().area() * sizeof(uint8_t));
+}
+
+void write_uint16_t(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
+{
+  dng_image.SetSamplesPerPixel(1);
+  uint16_t bps[1] = {16};
+  dng_image.SetBitsPerSample(1, bps);
+
+  dng_image.SetImageData(img.data, img.size().area() * sizeof(uint16_t));
+}
+
+cv::Mat1b gamma_compress(cv::Mat1w const &img)
+{
+  std::vector<uint8_t> lut;
+  for (size_t ii = 0; ii < 4096; ++ii) {
+    double x = double(ii) / 4095;
+    x = std::sqrt(x);
+    x *= 255;
+    lut.push_back(cv::saturate_cast<uint8_t>(std::round(x)));
+  }
+  cv::Mat1b compressed(img.size());
+  for (int row = 0; row < img.rows; ++row) {
+    for (int col = 0; col < img.cols; ++col) {
+      compressed(row, col) = lut.at(img(row, col) / 16);
+    }
+  }
+  return compressed;
+}
+
+cv::Mat1b gamma_compress_if_16bit(cv::Mat const &img)
+{
+  if (img.depth() == CV_16U) {
+    return gamma_compress(img);
+  }
+  return img;
+}
+
+void write_uint16_t_gamma_compressed(tinydngwriter::DNGImage &dng_image, cv::Mat1w const &img)
+{
+  write_uint8_t(dng_image, gamma_compress(img));
+}
+
 void Buffer::make_img_8(ArvBuffer *buf)
 {
   img.create(height, width, cv_type);
@@ -22,7 +131,10 @@ void Buffer::make_img_12(ArvBuffer *buf)
 {
   img.create(height, width, cv_type);
   const void *data = arv_buffer_get_data(buf, &size);
-  Misc::unpack12_16(img.data, static_cast<const unsigned char *>(data), size);
+  // Misc::unpack12_16(img.data, static_cast<const unsigned char *>(data), size);
+  Misc::unpack12Packed(static_cast<const unsigned char *>(data),
+                       reinterpret_cast<uint16_t *>(img.data),
+                       width * height);
 }
 
 void Buffer::make_img_16(ArvBuffer *buf)
@@ -30,7 +142,7 @@ void Buffer::make_img_16(ArvBuffer *buf)
   img.create(height, width, cv_type);
   const void *data = arv_buffer_get_data(buf, &size);
   memcpy(img.data, data, size);
-  img *= 16;
+  // img *= 16;
 }
 
 bool Buffer::isBayer() const
@@ -44,10 +156,38 @@ std::string Buffer::generateFilename() const
   std::string fn;
   std::string const extension = isBayer() ? "dng" : "tif";
   do {
-    fn = fmt::format("cv-{}-{}-{}.{}", system_timestamp, frame_id, counter, extension);
+    fn = fmt::format("cv-{}-{:04}-{:04}.{}", system_timestamp, frame_id, counter, extension);
     counter++;
   } while (fs::exists(fn));
   return fn;
+}
+
+#define WRITE_DESC(var) storage << #var << var;
+
+#define WRITE_DESC2(name, var) storage << #name << var;
+
+#define WRITE_MANAGER(var) storage << #var << manager->var;
+
+#define WRITE_MANAGER_DESC() \
+  WRITE_MANAGER(requested_exposure); \
+  WRITE_MANAGER(requested_gain);
+
+std::string Buffer::generateDescription() const
+{
+  cv::FileStorage storage("dummy.json", cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
+
+  WRITE_DESC(system_timestamp);
+  WRITE_DESC(bits);
+  WRITE_DESC2(size, int64_t(size));
+  WRITE_DESC(frame_id);
+  WRITE_DESC2(pixel_format, int64_t(pixel_format));
+  WRITE_DESC2(is_bayer, isBayer());
+
+  if (nullptr != manager) {
+    WRITE_MANAGER_DESC();
+  }
+
+  return storage.releaseAndGetString();
 }
 
 cv::Mat1b Buffer::clippingMask(const cv::Mat1b &img)
@@ -171,11 +311,16 @@ cv::Mat3b Buffer::exposureColored(CameraManager *manager) const
 
 void Buffer::save(const std::string &fn) const
 {
+  PARALLELTIME_FUNCTION();
+#if 0
   if (isBayer()) {
     saveDNG(fn);
     return;
   }
   cv::imwrite(fn, img, {cv::IMWRITE_TIFF_COMPRESSION, cv::IMWRITE_TIFF_COMPRESSION_LZW});
+  cv::imwrite(fn + "-compressed.tif", gamma_compress(img));
+#endif
+  zstd_writer(fn, gamma_compress_if_16bit(img), {.desc = generateDescription()});
 }
 
 void Buffer::save() const
@@ -188,80 +333,6 @@ void Buffer::savePtr(std::shared_ptr<Buffer> buf)
   buf->save();
 }
 
-#define TINY_DNG_WRITER_IMPLEMENTATION
-#include "tiny_dng_writer.h"
-
-bool const big_endian = false;
-
-void setup_image(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
-{
-  dng_image.SetBigEndian(big_endian);
-  unsigned int image_width = img.size().width;
-  unsigned int image_height = img.size().height;
-  dng_image.SetSubfileType(false, false, false);
-  dng_image.SetImageWidth(image_width);
-  dng_image.SetImageLength(image_height);
-  // We do not yet support multiple strips per image, so must set RowsPerStrip to image.height.
-  // TODO: https://github.com/syoyo/tinydng/issues/40
-  dng_image.SetRowsPerStrip(image_height);
-  dng_image.SetPlanarConfig(tinydngwriter::PLANARCONFIG_CONTIG);
-  dng_image.SetCompression(tinydngwriter::COMPRESSION_NONE);
-  dng_image.SetPhotometric(tinydngwriter::PHOTOMETRIC_CFA);
-  dng_image.SetXResolution(300.0);
-  dng_image.SetYResolution(300.0);
-  dng_image.SetOrientation(tinydngwriter::ORIENTATION_TOPLEFT);
-  dng_image.SetResolutionUnit(tinydngwriter::RESUNIT_NONE);
-  dng_image.SetImageDescription("Some image description");
-  dng_image.SetUniqueCameraModel("Some camera model");
-
-  dng_image.SetDNGVersion(1, 2, 0, 0);
-
-  dng_image.SetCFARepeatPatternDim(2, 2);
-
-  uint8_t cfa_pattern[4] = {0, 1, 1, 2};
-  dng_image.SetCFAPattern(4, cfa_pattern);
-}
-
-void finalize_write(tinydngwriter::DNGImage &dng_image, std::string const fn)
-{
-  tinydngwriter::DNGWriter dng_writer(big_endian);
-  bool ret = dng_writer.AddImage(&dng_image);
-  if (!ret) {
-    std::cout << "AddImage failed for " << fn << std::endl;
-    return;
-  }
-
-  std::string err;
-  ret = dng_writer.WriteToFile(fn.c_str(), &err);
-
-  if (!err.empty()) {
-    std::cerr << err;
-  }
-
-  if (!ret) {
-    std::cout << "WriteToFile failed for " << fn << std::endl;
-    return;
-  }
-}
-
-void write_uint8_t(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
-{
-  dng_image.SetSamplesPerPixel(1);
-  uint16_t bps[1] = {8};
-  dng_image.SetBitsPerSample(1, bps);
-
-  dng_image.SetImageData(img.data, img.size().area() * sizeof(uint8_t));
-}
-
-void write_uint16_t(tinydngwriter::DNGImage &dng_image, cv::Mat const &img)
-{
-  dng_image.SetSamplesPerPixel(1);
-  uint16_t bps[1] = {16};
-  dng_image.SetBitsPerSample(1, bps);
-
-  dng_image.SetImageData(img.data, img.size().area() * sizeof(uint16_t));
-}
-
 void Buffer::saveDNG(const std::string &fn) const
 {
   tinydngwriter::DNGImage dng_image;
@@ -272,7 +343,7 @@ void Buffer::saveDNG(const std::string &fn) const
       write_uint8_t(dng_image, img);
       break;
     case CV_16U:
-      write_uint16_t(dng_image, img);
+      write_uint16_t_gamma_compressed(dng_image, img);
       break;
     default:
       throw std::runtime_error("saveDNG is not implemented for the given depth");

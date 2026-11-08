@@ -219,4 +219,46 @@ int ceil_odd(const int val)
   return val;
 }
 
+void unpack12P(const uint8_t *src, uint16_t *dst, size_t pixel_count)
+{
+  if (pixel_count % 2 != 0) {
+    throw std::invalid_argument("Pixel count must be even.");
+  }
+
+  size_t num_pairs = pixel_count / 2;
+  for (size_t i = 0; i < num_pairs; ++i) {
+    // Bytes layout: [P0_0..7] [P0_8..11 | P1_0..3] [P1_4..11]
+    uint8_t b0 = src[0];
+    uint8_t b1 = src[1];
+    uint8_t b2 = src[2];
+
+    dst[0] = static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1 & 0x0F) << 8);
+    dst[1] = static_cast<uint16_t>(b1 >> 4) | (static_cast<uint16_t>(b2) << 4);
+
+    src += 3;
+    dst += 2;
+  }
+}
+
+void unpack12Packed(const uint8_t *src, uint16_t *dst, size_t pixel_count)
+{
+  if (pixel_count % 2 != 0) {
+    throw std::invalid_argument("Pixel count must be even.");
+  }
+
+  size_t num_pairs = pixel_count / 2;
+  for (size_t i = 0; i < num_pairs; ++i) {
+    // Bytes layout: [P0_4..11] [P0_0..3 | P1_0..3] [P1_4..11]
+    uint8_t b0 = src[0];
+    uint8_t b1 = src[1];
+    uint8_t b2 = src[2];
+
+    dst[0] = ((static_cast<uint16_t>(b0) << 4) | static_cast<uint16_t>(b1 >> 4)) << 4;
+    dst[1] = ((static_cast<uint16_t>(b2) << 4) | static_cast<uint16_t>(b1 & 0x0F)) << 4;
+
+    src += 3;
+    dst += 2;
+  }
+}
+
 }  // namespace Misc

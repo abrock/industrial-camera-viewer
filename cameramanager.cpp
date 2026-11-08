@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/objdetect.hpp>
 #include <opencv2/videostab/deblurring.hpp>
 
 #include <ParallelTime/paralleltime.h>
@@ -22,13 +23,21 @@ namespace fs = std::filesystem;
 #include "setfalseondestruct.h"
 #include "whitebalance.h"
 
+double CameraManager::downscale_factor(const cv::Mat &input, size_t max_width)
+{
+  if (input.size().width <= max_width) {
+    return 1;
+  }
+  return double(input.size().width) / max_width;
+}
+
 cv::Mat CameraManager::downscale_if_neccessary(const cv::Mat &input, size_t max_width)
 {
   if (input.size().width <= max_width) {
     return input;
   }
   cv::Mat result;
-  double const factor = double(input.size().width) / max_width;
+  double const factor = downscale_factor(input, max_width);
   cv::resize(input, result, cv::Size(), 1.0 / factor, 1.0 / factor, cv::INTER_AREA);
   return result;
 }
@@ -225,7 +234,7 @@ void CameraManager::runCameraMainThread()
 {
   println("Running CameraManager::runCamera");
 
-  camera = arv_camera_new(NULL, &error);
+  EXEC_AND_CHECK(camera = arv_camera_new(NULL, &error));
 
   if (!ARV_IS_CAMERA(camera)) {
     cv::Mat_<uint8_t> img(100, 100, uint8_t(0));
@@ -246,11 +255,11 @@ void CameraManager::runCameraMainThread()
 
   EXEC_AND_CHECK(arv_camera_get_gain_bounds(camera, &min_gain, &max_gain, &error));
 
-  arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_CONTINUOUS, &error);
+  EXEC_AND_CHECK(arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_CONTINUOUS, &error));
   println("arv_camera_set_acquisition_mode done.");
 
   /* Create the stream object without callback */
-  stream = arv_camera_create_stream(camera, NULL, NULL, &error);
+  EXEC_AND_CHECK(stream = arv_camera_create_stream(camera, NULL, NULL, &error));
   CHECK_EQ(nullptr, error) << error->message;
 
   CHECK(ARV_IS_STREAM(stream));
@@ -258,44 +267,51 @@ void CameraManager::runCameraMainThread()
   size_t payload;
 
   /* Retrieve the payload size for buffer creation */
-  payload = arv_camera_get_payload(camera, &error);
+  EXEC_AND_CHECK(payload = arv_camera_get_payload(camera, &error));
   CHECK_EQ(nullptr, error) << error->message;
 
   /* Insert some buffers in the stream buffer pool */
   for (int i = 0; i < 5; i++)
     arv_stream_push_buffer(stream, arv_buffer_new(payload, NULL));
 
-  arv_camera_start_acquisition(camera, &error);
+  EXEC_AND_CHECK(arv_camera_start_acquisition(camera, &error));
   CHECK_EQ(nullptr, error) << error->message;
 
-  arv_camera_set_exposure_time_auto(camera, ARV_AUTO_OFF, &error);
-  CHECK_EQ(nullptr, error) << error->message;
+  device = arv_camera_get_device(camera);
 
-  arv_camera_set_gain_auto(camera, ARV_AUTO_OFF, &error);
-  CHECK_EQ(nullptr, error) << error->message;
+  EXEC_AND_CHECK(arv_camera_set_exposure_time_auto(camera, ARV_AUTO_OFF, &error));
+
+  EXEC_AND_CHECK(arv_camera_set_gain_auto(camera, ARV_AUTO_OFF, &error));
 
   camera_running = true;
   setExposure(requested_exposure);
   setGain(requested_gain);
 
+  bool success = false;
   for (size_t ii = 0; !stopped; ++ii) {
-    usleep(10'000);
+    if (!success) {
+      usleep(100'000);
+    }
     std::lock_guard guard(arv_mutex);
     ArvBuffer *buffer;
 
-    buffer = arv_stream_pop_buffer(stream);
+    buffer = arv_stream_try_pop_buffer(stream);
     if (ARV_IS_BUFFER(buffer)) {
+      success = true;
       std::shared_ptr<Buffer> buf = std::make_shared<Buffer>(buffer);
       std::thread(&CameraManager::process_image, this, buf).detach();
 
       /* Don't destroy the buffer, but put it back into the buffer pool */
       arv_stream_push_buffer(stream, buffer);
     }
+    else {
+      success = false;
+    }
   }
   cv::destroyAllWindows();
 
   CHECK_EQ(nullptr, error) << error->message;
-  arv_camera_stop_acquisition(camera, &error);
+  EXEC_AND_CHECK(arv_camera_stop_acquisition(camera, &error));
   CHECK_EQ(nullptr, error) << error->message;
 
   /* Destroy the stream object */
@@ -331,7 +347,7 @@ void CameraManager::runCameraCallback()
   main_loop = g_main_loop_new(nullptr, FALSE);
 
   /* Connect to the first available camera */
-  camera = arv_camera_new(nullptr, &error);
+  EXEC_AND_CHECK(camera = arv_camera_new(nullptr, &error));
 
   if (ARV_IS_CAMERA(camera)) {
     ArvStream *stream = nullptr;
@@ -366,7 +382,7 @@ void CameraManager::runCameraCallback()
       EXEC_AND_CHECK(arv_camera_set_trigger(camera, "Line0", &error));
 
       // Optional: Configure activation edge via GenICam device feature access
-      ArvDevice *device = arv_camera_get_device(camera);
+      device = arv_camera_get_device(camera);
       EXEC_AND_CHECK(
           arv_device_set_string_feature_value(device, "TriggerSelector", "FrameStart", &error));
       EXEC_AND_CHECK(
@@ -461,7 +477,23 @@ void CameraManager::process_image(std::shared_ptr<Buffer> buf)
                              (1.0 - 1000 * cv::videostab::calcBlurriness(buf->get_raw_8()(roi)));
     Misc::println("Sharpness: {:3.3f}", sharpness);
   }
+  std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+  std::vector<int> markerIds;
+  {  // Aruco detection
+    cv::aruco::DetectorParameters detectorParams = cv::aruco::DetectorParameters();
+    cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+    detector.detectMarkers(colored, markerCorners, markerIds, rejectedCandidates);
+
+    double const factor = downscale_factor(colored, max_width_shown);
+    for (auto &vec : markerCorners) {
+      for (auto &pt : vec) {
+        pt /= factor;
+      }
+    }
+  }
   cv::Mat3b downscaled = downscale_if_neccessary(colored, max_width_shown);
+  cv::aruco::drawDetectedMarkers(colored, markerCorners, markerIds);
   cv::imshow(window_name, downscaled);
 }
 
@@ -553,7 +585,7 @@ void CameraManager::increaseGain()
   double const old_gain = requested_gain;
   double const new_gain = std::clamp(requested_gain + 1, min_gain, max_gain);
   setGain(new_gain);
-  println("Increased exposure from {} to {}", old_gain, new_gain);
+  println("Increased gain from {} to {}", old_gain, new_gain);
 }
 
 void CameraManager::decreaseGain()
@@ -563,7 +595,7 @@ void CameraManager::decreaseGain()
   double const old_gain = requested_gain;
   double const new_gain = std::clamp(requested_gain - 1, min_gain, max_gain);
   setGain(new_gain);
-  println("Decreased exposure from {} to {}", old_gain, new_gain);
+  println("Decreased gain from {} to {}", old_gain, new_gain);
 }
 
 void CameraManager::makeWindow()
@@ -585,8 +617,7 @@ void CameraManager::setExposure(double const exposure_us)
   }
   GError *error = nullptr;
   std::lock_guard guard(arv_mutex);
-  arv_camera_set_exposure_time(camera, exposure_us, &error);
-  CHECK_EQ(nullptr, error) << error->message;
+  EXEC_AND_CHECK(arv_camera_set_exposure_time(camera, exposure_us, &error));
   println("Set exposure time to {}", exposure_us);
 }
 
@@ -604,9 +635,8 @@ void CameraManager::setGain(const double gain)
   }
   GError *error = nullptr;
   std::lock_guard guard(arv_mutex);
-  arv_camera_set_gain(camera, requested_gain, &error);
-  CHECK_EQ(nullptr, error) << error->message;
-  println("Set gain time to {}", requested_gain);
+  EXEC_AND_CHECK(arv_camera_set_gain(camera, requested_gain, &error));
+  println("Set gain to {}", requested_gain);
 }
 
 void CameraManager::setCrosshairs(const bool val)
@@ -689,6 +719,22 @@ void CameraManager::setModeSingle()
   println("Setting acquisition mode to single");
   EXEC_AND_CHECK(
       arv_camera_set_acquisition_mode(camera, ARV_ACQUISITION_MODE_SINGLE_FRAME, &error));
+}
+
+void CameraManager::softwareTrigger()
+{
+  GError *error = nullptr;
+  EXEC_AND_CHECK(arv_device_execute_command(device, "TriggerSoftware", &error));
+}
+
+void CameraManager::saveAllImages(bool val)
+{
+  if (val) {
+    save_images = std::numeric_limits<int>::max();
+  }
+  else {
+    save_images = 0;
+  }
 }
 
 void CameraManager::handleWhiteBalance(cv::Mat3b &img, bool skip_auto_wb)

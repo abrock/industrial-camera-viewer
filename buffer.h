@@ -15,6 +15,8 @@ class Buffer {
   void make_img_16(ArvBuffer *buf);
 
  public:
+  CameraManager *manager = nullptr;
+
   int width = 0;
   int height = 0;
 
@@ -36,7 +38,7 @@ class Buffer {
    */
   int cv_type = CV_8UC1;
 
-  guint64 frame_id = 0;
+  int64 frame_id = 0;
 
   ArvPixelFormat pixel_format;
 
@@ -47,6 +49,8 @@ class Buffer {
   bool isBayer() const;
 
   std::string generateFilename() const;
+
+  std::string generateDescription() const;
 
   static cv::Mat1b clippingMask(cv::Mat1b const &img);
 

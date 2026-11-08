@@ -21,7 +21,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror ")
@@ -86,9 +86,14 @@ set(COMMON_LIBS
     gobject-2.0
     gthread-2.0
     ParallelTime
+    TIFF::TIFF
+    zstd::libzstd
 )
 
 set(LIB_SOURCES
+)
+
+add_library(industrial-camera-viewer-misc
     arv_ext.cpp
     buffer.cpp
     cameramanager.cpp
@@ -96,6 +101,11 @@ set(LIB_SOURCES
     misc.cpp
     setfalseondestruct.cpp
     whitebalance.cpp
+    zstd-writer.cpp
+)
+
+target_link_libraries(industrial-camera-viewer-misc
+${COMMON_LIBS}
 )
 
 set(PROJECT_SOURCES main.cpp qml.qrc)
@@ -113,7 +123,8 @@ endif()
 add_executable(tests tests.cpp test-mcheck.cpp ${LIB_SOURCES})
 target_link_libraries(tests GTest::gtest ${COMMON_LIBS})
 
-target_link_libraries(industrial-camera-viewer ${COMMON_LIBS})
+target_link_libraries(industrial-camera-viewer ${COMMON_LIBS}
+industrial-camera-viewer-misc)
 
 add_executable(
     industrial-camera-viewer-dbus-sender
@@ -164,4 +175,27 @@ target_link_libraries(
     ${OpenCV_LIBRARIES}
     ParallelTime
     fmt::fmt
+)
+
+#add_subdirectory(tinydng)
+
+add_executable(img2dng img2dng.cpp)
+target_link_libraries(img2dng
+    ${OpenCV_LIBRARIES}
+    tiff
+)
+
+# CMake provides an official FindTIFF module
+find_package(TIFF REQUIRED)
+
+# Upstream zstd and package managers like vcpkg/Conan provide a config package
+find_package(zstd CONFIG REQUIRED)
+
+add_executable(tiff-zstd-converter tiff-zstd-converter.cpp)
+target_link_libraries(tiff-zstd-converter
+    PRIVATE
+        TIFF::TIFF
+        zstd::libzstd
+        ${OpenCV_LIBS}
+        ${RUNNINGSTATS_LIBRARIES}
 )

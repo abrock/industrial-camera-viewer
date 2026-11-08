@@ -99,6 +99,14 @@ Window {
                                 cameraManager.setSaveVideo(save_video.checked);
                             }
                         }
+                        Button {
+                            text: "Save all images"
+                            checkable: true;
+                            id: save_all
+                            onCheckedChanged: {
+                                cameraManager.saveAllImages(save_all.checked);
+                            }
+                        }
                     }
                     RowLayout {
                         Text {
@@ -114,6 +122,17 @@ Window {
                             text: "Line0"
                             onClicked: {
                                 cameraManager.setTriggerSource("Line0")
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Text {
+                            text: qsTr("Trigger: ")
+                        }
+                        Button {
+                            text: "Software"
+                            onClicked: {
+                                cameraManager.softwareTrigger()
                             }
                         }
                     }
